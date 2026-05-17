@@ -590,11 +590,12 @@ if __name__ == "__main__":
     bot_path    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.py")
 
     port = os.environ.get("SERVER_PORT", "8082")
+    certs_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs")
     print(f"[*] Starting mitmdump proxy on port {port}...")
     proxy_proc = subprocess.Popen(
         [
             sys.executable, "-c",
-            f"import sys; from mitmproxy.tools.main import mitmdump; sys.argv = ['mitmdump', '-s', '{script_path}', '-p', '{port}', '--listen-host', '0.0.0.0', '--set', 'block_global=false']; mitmdump()",
+            f"import sys; from mitmproxy.tools.main import mitmdump; sys.argv = ['mitmdump', '-s', '{script_path}', '-p', '{port}', '--listen-host', '0.0.0.0', '--set', 'block_global=false', '--set', 'confdir={certs_path}']; mitmdump()",
         ],
         env=os.environ.copy(),
         cwd=os.path.dirname(os.path.abspath(__file__))   # run from backend folder
