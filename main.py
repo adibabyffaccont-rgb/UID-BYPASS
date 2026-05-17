@@ -58,9 +58,9 @@ MOBILE_PROTO = "25f16c42b17c8239fccb04095cf57404c3b0bb26906e7ba86f20ce787935f3b9
 # Initialize template for MajorLogin
 try:
     decrypted_bytes = aes_decrypt(MOBILE_PROTO)
-    decrypted_hex = decrypted_bytes.hex()
+    decrypted_hex = decrypted_bytes.hex() if decrypted_bytes else ""
     proto_json = get_available_room(decrypted_hex)
-    proto_fields = json.loads(proto_json)
+    proto_fields = json.loads(proto_json or "{}")
     proto_template = copy.deepcopy(proto_fields)
     print("✅ Successfully loaded and parsed MOBILE_PROTO template")
 except Exception as e:
@@ -70,9 +70,9 @@ except Exception as e:
 # Initialize second template for GetLoginData (same proto, separate deepcopy)
 try:
     decrypted_bytes1 = aes_decrypt(MOBILE_PROTO)
-    decrypted_hex1 = decrypted_bytes1.hex()
+    decrypted_hex1 = decrypted_bytes1.hex() if decrypted_bytes1 else ""
     proto_json1 = get_available_room(decrypted_hex1)
-    proto_fields1 = json.loads(proto_json1)
+    proto_fields1 = json.loads(proto_json1 or "{}")
     proto_template1 = copy.deepcopy(proto_fields1)
     print("✅ Successfully loaded proto_template1 for GetLoginData")
 except Exception as e:
@@ -166,7 +166,7 @@ def checkUIDExists(uid: str) -> bool:
     """Check if UID is in the users section of bot_data.json.
     Reads fresh from disk every call so bot.py changes are instantly visible.
     """
-    uid = str(uid).strip()
+    uid = uid.strip()
     print(f"\n[UID CHECK] Checking UID: {uid}")
 
     # ── PRIMARY: users object in JSON (managed by Discord bot) ───────────────
@@ -202,7 +202,7 @@ def checkUIDExists(uid: str) -> bool:
 def fetch_uids(server_name: str, url: str) -> set | None:
     """Fetch UIDs from remote server and sync into uid_cache in JSON."""
     try:
-        r = requests.get(url, timeout=10, proxies={"http": None, "https": None})
+        r = requests.get(url, timeout=10, proxies={"http": "", "https": ""})
         r.raise_for_status()
         uids = {
             line.strip()
@@ -232,18 +232,18 @@ def fetch_uids(server_name: str, url: str) -> set | None:
         return None
 
 
-def lookup_geo(ip: str):
+def lookup_geo(ip: str | None):
     if not ip:
         return None, None, None
     try:
-        r = requests.get(f"http://ip-api.com/json/{ip}", timeout=5, proxies={"http": None, "https": None})
+        r = requests.get(f"http://ip-api.com/json/{ip}", timeout=5, proxies={"http": "", "https": ""})
         j = r.json()
         return j.get("country"), j.get("regionName"), j.get("city")
     except:
         return None, None, None
 
 
-def log_login_db(uid: str, ip: str, country: str, region: str, city: str, status: str):
+def log_login_db(uid: str, ip: str | None, country: str | None, region: str | None, city: str | None, status: str):
     entry = {"uid": uid, "ip": ip, "country": country,
              "region": region, "city": city,
              "ts": int(time.time()), "status": status}
@@ -304,6 +304,8 @@ class MajorLoginInterceptor:
         if flow.request.method.upper() == "POST" and "/MajorLogin" in flow.request.path:
             try:
                 request_bytes = flow.request.content
+                if request_bytes is None:
+                    return
                 request_hex = request_bytes.hex()
                 
                 # Decrypt
@@ -312,7 +314,7 @@ class MajorLoginInterceptor:
                 
                 # Parse
                 proto_json = get_available_room(decrypted_hex)
-                proto_fields = json.loads(proto_json)
+                proto_fields = json.loads(proto_json or "{}")
                 
                 uid = None
                 access_token = None
@@ -400,11 +402,13 @@ class MajorLoginInterceptor:
             return
         try:
             request_bytes = flow.request.content
+            if request_bytes is None:
+                return
             request_hex = request_bytes.hex()
             decrypted_bytes = aes_decrypt(request_hex)
             decrypted_hex = decrypted_bytes.hex()
             proto_json = get_available_room(decrypted_hex)
-            proto_fields = json.loads(proto_json)
+            proto_fields = json.loads(proto_json or "{}")
 
             uid = None
             access_token = None
@@ -481,10 +485,12 @@ class MajorLoginInterceptor:
         inc_stat("total")
 
         try:
+            if flow.response is None or flow.response.content is None:
+                return
             respBody = flow.response.content.hex()
             # Decode using new utils
             proto_json = get_available_room(respBody)
-            proto_fields = json.loads(proto_json)
+            proto_fields = json.loads(proto_json or "{}")
             
             uid = None
             for field_num in ["1", "2", "3"]:
@@ -540,8 +546,9 @@ class MajorLoginInterceptor:
                     f"[FF0000]⧉───────────────────────────────────────────────⧉\n"
                 ).encode()
 
-                flow.response.content = verification_message
-                flow.response.status_code = 500
+                if flow.response:
+                    flow.response.content = verification_message
+                    flow.response.status_code = 500
                 return
 
             # ================= ALLOWED =================
@@ -556,15 +563,18 @@ class MajorLoginInterceptor:
         # ===== GetAccountBriefInfoBeforeLogin nickname modifier =====
         if flow.request.method.upper() == "POST" and "/GetAccountBriefInfoBeforeLogin" in flow.request.path:
             try:
-                current_response = CSGetAccountBriefInfoBeforeLoginRes_pb2.CSGetAccountBriefInfoBeforeLoginRes()
+                if flow.response is None or flow.response.content is None:
+                    return
+                current_response = CSGetAccountBriefInfoBeforeLoginRes_pb2.CSGetAccountBriefInfoBeforeLoginRes() # type: ignore
                 current_response.ParseFromString(flow.response.content)
                 old_nickname = current_response.nickname
                 current_response.nickname = (
                     f"[c][ff0000]{old_nickname}"
                 )
                 new_content = current_response.SerializeToString()
-                flow.response.content = new_content
-                flow.response.headers["Content-Length"] = str(len(new_content))
+                if flow.response:
+                    flow.response.content = new_content
+                    flow.response.headers["Content-Length"] = str(len(new_content))
             except Exception as e:
                 print(f"[GetAccountBriefInfo] Error modifying nickname: {e}")
 
@@ -584,7 +594,7 @@ if __name__ == "__main__":
     proxy_proc = subprocess.Popen(
         [
             sys.executable, "-c",
-            f"import sys; from mitmproxy.tools.main import mitmdump; sys.argv = ['mitmdump', '-q', '-s', '{script_path}', '-p', '{port}', '--listen-host', '0.0.0.0', '--set', 'block_global=false', '--set', 'termlog_verbosity=error']; mitmdump()",
+            f"import sys; from mitmproxy.tools.main import mitmdump; sys.argv = ['mitmdump', '-s', '{script_path}', '-p', '{port}', '--listen-host', '0.0.0.0', '--set', 'block_global=false']; mitmdump()",
         ],
         env=os.environ.copy(),
         cwd=os.path.dirname(os.path.abspath(__file__))   # run from backend folder
