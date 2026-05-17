@@ -1,0 +1,9 @@
+{
+    "pythonVersion": "3.12",
+    "pythonPlatform": "Windows",
+    "pythonPath": "C:/Users/Admin/AppData/Local/Programs/Python/Python312/python.exe",
+    "venvPath": ".",
+    "typeCheckingMode": "off",
+    "reportMissingImports": false,
+    "reportMissingModuleSource": false
+}
